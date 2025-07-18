@@ -1,51 +1,70 @@
 from typing import Any, Hashable
+from dataclasses import dataclass
+
+
+@dataclass
+class Node:
+    key: Hashable
+    hash_value: int
+    value: Any
 
 
 class Dictionary:
+    INITIAL_CAPACITY = 8
+    LOAD_FACTOR = 2 / 3
 
     def __init__(self) -> None:
-        self.hash_table = [[] for _ in range(8)]
+        self.capacity = self.INITIAL_CAPACITY
         self.size = 0
-        self.load_threshold = len(self.hash_table) * 2 / 3
+        self.hash_table: list[None | Node] = [None] * self.INITIAL_CAPACITY
 
     def _resize(self) -> None:
-        our_hash_table = self.hash_table[:]
-        new_hash_table = [[] for _ in range(len(our_hash_table) * 2)]
-        self.load_threshold = len(new_hash_table) * 2 / 3
-        for box in our_hash_table:
-            for data in box:
-                new_index_hash_table = hash(data[0]) % len(new_hash_table)
-                new_hash_table[new_index_hash_table].append(data)
-        self.hash_table = new_hash_table
+        old_table = self.hash_table
+
+        self.capacity *= 2
+        self.hash_table = [None] * self.capacity
+        self.size = 0
+
+        for node in old_table:
+            if node is not None:
+                self[node.key] = node.value
 
     def __setitem__(self, key: Hashable, value: Any) -> None:
-        if self.size >= self.load_threshold:
-            self._resize()
+        index = self._calculate_index(key)
 
-        index_hash_table = hash(key) % len(self.hash_table)
-        if self.hash_table[index_hash_table]:
-            for index, data in enumerate(self.hash_table[index_hash_table]):
-                if data[0] == key:
-                    self.hash_table[index_hash_table][index] = (
-                        key, hash(key), value
-                    )
-                    break
-            else:
-                self.hash_table[index_hash_table].append(
-                    (key, hash(key), value)
-                )
-                self.size += 1
-        else:
-            self.hash_table[index_hash_table].append((key, hash(key), value))
+        if (node := self.hash_table[index]) is None:
+            if self.size + 1 > self.capacity * self.LOAD_FACTOR:
+                self._resize()
+
+                return self.__setitem__(key, value)
+
+            self.hash_table[index] = Node(key, hash(key), value)
             self.size += 1
+        else:
+            node.value = value
 
     def __getitem__(self, key: Hashable) -> Any:
-        index_hash_table = hash(key) % len(self.hash_table)
-        for data in self.hash_table[index_hash_table]:
-            if data[0] == key:
-                return data[2]
-        else:
+        index = self._calculate_index(key)
+
+        if (node := self.hash_table[index]) is None:
             raise KeyError(key)
+        else:
+            return node.value
 
     def __len__(self) -> int:
         return self.size
+
+    def _linear_probing(self, index: int) -> int:
+        return (index + 1) % self.capacity
+
+    def _calculate_index(self, key: Hashable) -> int:
+        hash_value = hash(key)
+        index = hash_value % self.capacity
+
+        while (
+                (node := self.hash_table[index]) is not None
+                and (hash_value != node.hash_value or key != node.key)
+        ):
+            index = self._linear_probing(index)
+
+        return index
